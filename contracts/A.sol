@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.9;
+pragma solidity 0.8.17;
 
 import "./B.sol";
 
 contract A {
-    error ErrorA();
+    error CustomErrorA(address addr);
 
     B private _contractB;
     uint private _value;
@@ -20,7 +20,7 @@ contract A {
     function throwError() external {
         _value += 1;
 
-        revert ErrorA();
+        revert CustomErrorA(address(this));
     }
 
     function callB() external {

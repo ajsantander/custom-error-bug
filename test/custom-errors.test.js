@@ -1,14 +1,47 @@
+const assert = require('assert');
 const { ethers } = require('hardhat');
-const { expect } = require('chai');
+
+async function getCustomError(txRequest, contract) {
+	const code = await ethers.provider.call(txRequest);
+
+  for (const fragment of Object.values(contract.interface.errors)) {
+    try {
+      const errorValues = contract.interface.decodeErrorResult(fragment, code);
+      return `${fragment.name}(${errorValues.join(',')})`;
+    } catch (err) {}
+  }
+}
+
+async function assertRevert(txRequest, expectedError, contract) {
+  let error;
+
+  try {
+    const txResponse = await txRequest;
+    const txReceipt = await txResponse.wait();
+  } catch (err) {
+    error = err;
+  }
+
+  if (error) {
+    let msg = error.toString();
+
+    if (!msg.includes(expectedError)) {
+      // Ethers fails to get the revert reason from anvil,
+      // though it can be seen in anvil's logging,
+      // so try to get the reason manually.
+      msg = await getCustomError(txRequest, contract);
+
+      if (!msg.includes(expectedError)) {
+        throw new Error(`Transaction was expected to revert with ${expectedError}, but reverted with ${msg}`);
+      }
+    }
+  } else {
+    throw new Error('Transaction was expected to revert but it did not');
+  }
+}
 
 describe('Custom errors', function () {
-  let contractA, contractB;
-
-  let signer;
-
-  before('identify signers', async function () {
-    ([signer] = await ethers.getSigners());
-  });
+  let A, B;
 
   before('deploy contracts', async function () {
     let factory;
@@ -22,31 +55,40 @@ describe('Custom errors', function () {
 
   describe('A.returnString()', function () {
     it('returns the expected result', async function () {
-      expect(await A.returnString()).to.equal('hello');
+      assert.equal(
+        await A.returnString(),
+        'hello'
+      );
     });
   });
 
   describe('A.throwError()', function () {
-    it('reverts with ErrorA', async function () {
-      // await A.throwError(); // Uncomment to see custom error in console
-
-      await expect(A.throwError()).to.be.revertedWithCustomError(A, 'ErrorA');
+    it('reverts with CustomErrorA', async function () {
+      await assertRevert(
+        A.throwError(),
+        'CustomErrorA',
+        A
+      );
     });
   });
 
   describe('B.throwError()', function () {
-    it('reverts with ErrorB', async function () {
-      // await B.throwError(); // Uncomment to see custom error in console
-
-      await expect(B.throwError()).to.be.revertedWithCustomError(B, 'ErrorB');
+    it('reverts with CustomErrorB', async function () {
+      await assertRevert(
+        B.throwError(),
+        'CustomErrorB',
+        B
+      );
     });
   });
 
   describe('A.callB', function () {
-    it('reverts with ErrorB', async function () {
-      // await A.callB(); // Uncomment to see custom error in console
-
-      await expect(A.callB()).to.be.revertedWithCustomError(B, 'ErrorB');
+    it('reverts with CustomErrorB', async function () {
+      await assertRevert(
+        A.callB(),
+        'CustomErrorB',
+        B
+      );
     });
   });
 });
